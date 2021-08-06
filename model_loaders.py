@@ -10,7 +10,7 @@ def load_object_detector(model_path, model_name):
     cfg.merge_from_file('./object_detection/model/config.yaml')
     cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5 # Set threshold for this model
     cfg.MODEL.WEIGHTS = model_path+model_name # Set path model .pth
-    #cfg.MODEL.DEVICE = ('cpu') # Set path model .pth
+    cfg.MODEL.DEVICE = ('cpu') # Set path model .pth
     #cfg.MODEL.ROI_HEADS.NUM_CLASSES = 3
     return DefaultPredictor(cfg)
     
