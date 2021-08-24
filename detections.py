@@ -5,6 +5,7 @@ import numpy as np
 import os
 import pandas as pd
 import cv2
+os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH")
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from PIL import Image
