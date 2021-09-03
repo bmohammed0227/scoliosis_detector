@@ -85,7 +85,6 @@ class CustomQLabel(QtWidgets.QLabel):
     def mouseReleaseEvent(self, event):
         self.mousse_is_pressed = False
         self.circles_selected = [False, False, False, False]
-        print(self.keypoints)
 
 class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def __init__(self, *args, obj=None, **kwargs):
@@ -98,6 +97,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.landmarks_label.setFrameShape(QtWidgets.QFrame.Box)
         self.landmarks_label.setText("")
         self.landmarks_label.setObjectName("landmarks_label")
+        self.landmarks_label.setEnabled(False)
 
         QtCore.QMetaObject.connectSlotsByName(self)
 
@@ -205,6 +205,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.landmarks_image_label.setAlignment(QtCore.Qt.AlignCenter)
         # Set the visualization of the vertebra landmarks
         self.next_landmarks_image()
+        self.landmarks_label.setEnabled(True)
         self.arrowR_landmarks_btn.setEnabled(True)
         self.arrowL_landmarks_btn.setEnabled(False)
     
