@@ -1,24 +1,107 @@
 import os
-os.environ["PYTORCH_JIT"] = "0"
-from PyQt5 import QtCore, QtGui, QtWidgets, uic
+from PyQt5 import QtCore, QtGui, QtWidgets
 from gui import Ui_MainWindow
-from model_loaders import *
-from detections import object_detection, landmark_detection, calculate_angles
 from utils import *
 import threading
-import time
 import cv2
+os.environ["PYTORCH_JIT"] = "0"
+
+
+class CustomQLabel(QtWidgets.QLabel):
+    def __init__(self, parentWindow):
+        super(CustomQLabel, self).__init__(parentWindow)
+
+        self.mousse_is_pressed = False
+        self.old_keypoints = []
+        self.keypoints = []
+        self.starting_x = 0
+        self.starting_y = 0
+        self.scale = 0
+        self.circles_selected = []
+
+    # Set the vertebra image with landmarks on the label
+    def set_landmarks_label(self, keypoints) :
+        xrayImage = window.xrayImage
+        image_landmarks = xrayImage.patches[window.index_landmarks].copy()
+        if keypoints == None :
+            self.keypoints = []
+            for i in range(4):
+                x = xrayImage.landmarks[window.index_landmarks][i][0]-xrayImage.bboxes[window.index_landmarks][0]
+                y = xrayImage.landmarks[window.index_landmarks][i][1]-xrayImage.bboxes[window.index_landmarks][1]
+                self.keypoints.append((int(x),int(y)))
+        image_landmarks = cv2.circle(image_landmarks, self.keypoints[0], 2, (255, 0, 0), 10)
+        image_landmarks = cv2.circle(image_landmarks, self.keypoints[1], 2, (255, 0, 0), 10)
+        image_landmarks = cv2.circle(image_landmarks, self.keypoints[2], 2, (0, 0, 255), 10)
+        image_landmarks = cv2.circle(image_landmarks, self.keypoints[3], 2, (0, 0, 255), 10)
+        qimage_landmarks = convert_cv2QImage(image_landmarks)
+        pixmap = QtGui.QPixmap.fromImage(qimage_landmarks)
+        pixmap = pixmap.scaled(self.width(), self.height(), QtCore.Qt.KeepAspectRatio)
+        self.setPixmap(pixmap)
+        self.setAlignment(QtCore.Qt.AlignCenter)
+
+    # Mouse press event handler
+    def mousePressEvent(self, event):
+        xrayImage = window.xrayImage
+        self.mousse_is_pressed = True
+        self.old_keypoints = self.keypoints.copy()
+        pos = (event.pos().x()-self.starting_x)*self.scale, (event.pos().y()-self.starting_y)*self.scale
+        for i in range(4):
+            r = 10
+            x = self.keypoints[i][0]
+            y = self.keypoints[i][1]
+            if ((pos[0] <= x+r/2) and (pos[0] >= x-r/2) and (pos[1] <= y+r/2) and (pos[1] >= y-r/2)) :
+                self.circles_selected[i] = True
+                window.relaunch_landmarks_btn.setEnabled(True)
+                xrayImage.isCorrectedLandmarks = True
+                xrayImage.isCorrectedBbox = False
+
+    # Mouse move event handler
+    def mouseMoveEvent(self, event):
+        if self.mousse_is_pressed:
+            for i in range(4):
+                if self.circles_selected[i] == True :
+                    pos = (event.pos().x()-self.starting_x)*self.scale, (event.pos().y()-self.starting_y)*self.scale
+                    self.keypoints[i] = (int(pos[0]), int(pos[1]))
+                    diff_x = self.keypoints[i][0] - self.old_keypoints[i][0]
+                    diff_y = self.keypoints[i][1] - self.old_keypoints[i][1]
+                    new_landmark_pos = window.xrayImage.landmarks[window.index_landmarks][i]
+                    window.xrayImage.landmarks[window.index_landmarks][i] = (new_landmark_pos[0]+diff_x, new_landmark_pos[1]+diff_y)
+                    self.old_keypoints = self.keypoints.copy()
+                    self.set_landmarks_label(self.keypoints)
+                    image_landmarks = window.xrayImage.image.copy()
+                    for i, l in enumerate(window.xrayImage.landmarks):
+                        image_landmarks = cv2.circle(image_landmarks, l[0], 2, (255, 0, 0), 10)
+                        image_landmarks = cv2.circle(image_landmarks, l[1], 2, (255, 0, 0), 10)
+                        image_landmarks = cv2.circle(image_landmarks, l[2], 2, (0, 0, 255, 255), 10)
+                        image_landmarks = cv2.circle(image_landmarks, l[3], 2, (0, 0, 255), 10)
+                    # Set the landmarks image on the landmarks window label
+                    qimage_landmarks = convert_cv2QImage(image_landmarks)
+                    pixmap = QtGui.QPixmap.fromImage(qimage_landmarks)
+                    pixmap = pixmap.scaled(window.landmarks_image_label.width(), window.landmarks_image_label.height(), QtCore.Qt.KeepAspectRatio)
+                    window.landmarks_image_label.setPixmap(pixmap)
+                    window.landmarks_image_label.setAlignment(QtCore.Qt.AlignCenter)
+
+    # Mouse release event handler
+    def mouseReleaseEvent(self, event):
+        self.mousse_is_pressed = False
+        self.circles_selected = [False, False, False, False]
+        print(self.keypoints)
 
 class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def __init__(self, *args, obj=None, **kwargs):
         super(MainWindow, self).__init__(*args, **kwargs)
         self.setupUi(self)
 
-        MainWindow.keyPressEvent = self.keyPressEvent
-        self.landmarks_label.mousePressEvent = self.mousePressEvent
-        self.landmarks_label.mouseMoveEvent = self.mouseMoveEvent
-        self.landmarks_label.mouseReleaseEvent = self.mouseReleaseEvent
-        self.mousse_is_pressed = False
+        # Set up cutsom QLabel for landmarks tab
+        self.landmarks_label = CustomQLabel(self.landmarks_window)
+        self.landmarks_label.setGeometry(QtCore.QRect(420, 370, 191, 131))
+        self.landmarks_label.setFrameShape(QtWidgets.QFrame.Box)
+        self.landmarks_label.setText("")
+        self.landmarks_label.setObjectName("landmarks_label")
+
+        QtCore.QMetaObject.connectSlotsByName(self)
+
+        # MainWindow.keyPressEvent = self.keyPressEvent
         self.crop_vertebra_direction = 1
         self.first_slope = True
 
@@ -184,51 +267,32 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def next_landmarks_image(self):
         if self.index_landmarks < len(self.xrayImage.patches)-1 :
             self.index_landmarks += 1
-            self.set_landmarks_label(None)
+            self.landmarks_label.set_landmarks_label(None)
             if len(self.xrayImage.patches)-1 == self.index_landmarks :
                 self.arrowR_landmarks_btn.setEnabled(False)
             if self.index_landmarks > 0 :
                 self.arrowL_landmarks_btn.setEnabled(True)
             self.num_landmarks_label.setText("Vertèbre n°"+str(self.index_landmarks+1))
-            self.starting_x = (self.landmarks_label.width() - self.landmarks_label.pixmap().width())/2
-            self.starting_y = (self.landmarks_label.height() - self.landmarks_label.pixmap().height())/2
-            self.scale = self.xrayImage.patches[self.index_landmarks].shape[0] / self.landmarks_label.pixmap().height()
-            self.circles_selected = [False, False, False, False]
+            self.landmarks_label.starting_x = (self.landmarks_label.width() - self.landmarks_label.pixmap().width())/2
+            self.landmarks_label.starting_y = (self.landmarks_label.height() - self.landmarks_label.pixmap().height())/2
+            self.landmarks_label.scale = self.xrayImage.patches[self.index_landmarks].shape[0] / self.landmarks_label.pixmap().height()
+            self.landmarks_label.circles_selected = [False, False, False, False]
     
     # Previous landmarks image
     def previous_landmarks_image(self):
         if self.index_landmarks > 0 :
             self.index_landmarks -= 1
-            self.set_landmarks_label(None)
+            self.landmarks_label.set_landmarks_label(None)
             if self.index_landmarks == 0 :
                 self.arrowL_landmarks_btn.setEnabled(False)
             if self.index_landmarks < len(self.xrayImage.patches)-1 :
                 self.arrowR_landmarks_btn.setEnabled(True)
             self.num_landmarks_label.setText("Vertèbre n°"+str(self.index_landmarks+1))
-            self.starting_x = (self.landmarks_label.width() - self.landmarks_label.pixmap().width())/2
-            self.starting_y = (self.landmarks_label.height() - self.landmarks_label.pixmap().height())/2
-            self.scale = self.xrayImage.patches[self.index_landmarks].shape[0] / self.landmarks_label.pixmap().height()
-            self.circles_selected = [False, False, False, False]
-    
-    # Set the vertebra image with landmarks on the label
-    def set_landmarks_label(self, keypoints) :
-        image_landmarks = self.xrayImage.patches[self.index_landmarks].copy()
-        if keypoints == None :
-            self.keypoints = []
-            for i in range(4):
-                x = self.xrayImage.landmarks[self.index_landmarks][i][0]-self.xrayImage.bboxes[self.index_landmarks][0]
-                y = self.xrayImage.landmarks[self.index_landmarks][i][1]-self.xrayImage.bboxes[self.index_landmarks][1]
-                self.keypoints.append((int(x),int(y)))
-        image_landmarks = cv2.circle(image_landmarks, self.keypoints[0], 2, (255, 0, 0), 10)
-        image_landmarks = cv2.circle(image_landmarks, self.keypoints[1], 2, (255, 0, 0), 10)
-        image_landmarks = cv2.circle(image_landmarks, self.keypoints[2], 2, (0, 0, 255), 10)
-        image_landmarks = cv2.circle(image_landmarks, self.keypoints[3], 2, (0, 0, 255), 10)
-        qimage_landmarks = convert_cv2QImage(image_landmarks)
-        pixmap = QtGui.QPixmap.fromImage(qimage_landmarks)
-        pixmap = pixmap.scaled(self.landmarks_label.width(), self.landmarks_label.height(), QtCore.Qt.KeepAspectRatio)
-        self.landmarks_label.setPixmap(pixmap)
-        self.landmarks_label.setAlignment(QtCore.Qt.AlignCenter)
-    
+            self.landmarks_label.starting_x = (self.landmarks_label.width() - self.landmarks_label.pixmap().width())/2
+            self.landmarks_label.starting_y = (self.landmarks_label.height() - self.landmarks_label.pixmap().height())/2
+            self.landmarks_label.scale = self.xrayImage.patches[self.index_landmarks].shape[0] / self.landmarks_label.pixmap().height()
+            self.landmarks_label.circles_selected = [False, False, False, False]
+
     # Relaunch the detection with corrected bbx
     def relaunch_bbx(self):
         self.choose_image_btn.setEnabled(False)
@@ -284,7 +348,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.arrowL_landmarks_btn.setEnabled(True)
         th = threading.Thread(target=thread_relaunch_landmarks)
         th.start()
-        
+
     # keypress event handler
     def keyPressEvent(self,event):
         if self.menu_window == self.tabWidget.currentWidget() and self.launch_btn.isEnabled() :
@@ -411,51 +475,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             imageAngle = self.xrayImage.calculate_angles(lower_MT, upper_MT)
             self.update_angles_tab(imageAngle)
             
-    # Mouse press event handler
-    def mousePressEvent(self, event):
-        self.mousse_is_pressed = True
-        self.old_keypoints = self.keypoints.copy()
-        pos = (event.pos().x()-self.starting_x)*self.scale, (event.pos().y()-self.starting_y)*self.scale
-        for i in range(4):
-            r = 10
-            x = self.keypoints[i][0]
-            y = self.keypoints[i][1]
-            if ((pos[0] <= x+r/2) and (pos[0] >= x-r/2) and (pos[1] <= y+r/2) and (pos[1] >= y-r/2)) :
-                self.circles_selected[i] = True
-                self.relaunch_landmarks_btn.setEnabled(True)
-                self.xrayImage.isCorrectedLandmarks = True
-                self.xrayImage.isCorrectedBbox = False
-            
-    # Mouse move event handler
-    def mouseMoveEvent(self, event):
-        if self.mousse_is_pressed:
-            for i in range(4):
-                if self.circles_selected[i] == True :
-                    pos = (event.pos().x()-self.starting_x)*self.scale, (event.pos().y()-self.starting_y)*self.scale
-                    self.keypoints[i] = (int(pos[0]), int(pos[1]))
-                    diff_x = self.keypoints[i][0] - self.old_keypoints[i][0]
-                    diff_y = self.keypoints[i][1] - self.old_keypoints[i][1]
-                    new_landmark_pos = self.xrayImage.landmarks[self.index_landmarks][i]
-                    self.xrayImage.landmarks[self.index_landmarks][i] = (new_landmark_pos[0]+diff_x, new_landmark_pos[1]+diff_y)
-                    self.old_keypoints = self.keypoints.copy()
-                    self.set_landmarks_label(self.keypoints)
-                    image_landmarks = self.xrayImage.image.copy()
-                    for i, l in enumerate(self.xrayImage.landmarks):
-                        image_landmarks = cv2.circle(image_landmarks, l[0], 2, (255, 0, 0), 10)
-                        image_landmarks = cv2.circle(image_landmarks, l[1], 2, (255, 0, 0), 10)
-                        image_landmarks = cv2.circle(image_landmarks, l[2], 2, (0, 0, 255, 255), 10)
-                        image_landmarks = cv2.circle(image_landmarks, l[3], 2, (0, 0, 255), 10)
-                    # Set the landmarks image on the landmarks window label
-                    qimage_landmarks = convert_cv2QImage(image_landmarks)
-                    pixmap = QtGui.QPixmap.fromImage(qimage_landmarks)
-                    pixmap = pixmap.scaled(self.landmarks_image_label.width(), self.landmarks_image_label.height(), QtCore.Qt.KeepAspectRatio)
-                    self.landmarks_image_label.setPixmap(pixmap)
-                    self.landmarks_image_label.setAlignment(QtCore.Qt.AlignCenter)
-            
-    # Mouse release event handler
-    def mouseReleaseEvent(self, event):
-        self.mousse_is_pressed = False
-        self.circles_selected = [False, False, False, False]
         
 if __name__ == "__main__":
     import sys

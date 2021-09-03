@@ -253,22 +253,6 @@ font-weight: bold</string>
        <string/>
       </property>
      </widget>
-     <widget class="QLabel" name="landmarks_label">
-      <property name="geometry">
-       <rect>
-        <x>420</x>
-        <y>370</y>
-        <width>191</width>
-        <height>131</height>
-       </rect>
-      </property>
-      <property name="frameShape">
-       <enum>QFrame::Box</enum>
-      </property>
-      <property name="text">
-       <string/>
-      </property>
-     </widget>
      <widget class="QPushButton" name="arrowR_landmarks_btn">
       <property name="enabled">
        <bool>false</bool>
