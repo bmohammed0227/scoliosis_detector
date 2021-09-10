@@ -529,11 +529,41 @@ font-weight: bold</string>
        </property>
       </widget>
      </widget>
+     <widget class="QWidget" name="verticalLayoutWidget">
+      <property name="geometry">
+       <rect>
+        <x>430</x>
+        <y>570</y>
+        <width>160</width>
+        <height>80</height>
+       </rect>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout">
+       <item>
+        <widget class="QRadioButton" name="radioBtnCobb">
+         <property name="text">
+          <string>Angle de Cobb</string>
+         </property>
+         <property name="checked">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QRadioButton" name="radioBtnFerguson">
+         <property name="text">
+          <string>Angle de Ferguson</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
      <zorder>frame</zorder>
      <zorder>angle_image_label</zorder>
      <zorder>label</zorder>
      <zorder>label_3</zorder>
      <zorder>frame_2</zorder>
+     <zorder>verticalLayoutWidget</zorder>
     </widget>
    </widget>
   </widget>

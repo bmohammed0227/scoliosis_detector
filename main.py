@@ -120,6 +120,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.arrowL_landmarks_btn.clicked.connect(self.previous_landmarks_image)
         self.relaunch_bbox_btn.clicked.connect(self.relaunch_bbx)
         self.relaunch_landmarks_btn.clicked.connect(self.relaunch_landmarks)
+        self.radioBtnCobb.clicked.connect(self.radioBtnClicked)
+        self.radioBtnFerguson.clicked.connect(self.radioBtnClicked)
         check_data_directories()
         self.H_padding = 15
         self.V_padding = 4
@@ -349,6 +351,16 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.arrowL_landmarks_btn.setEnabled(True)
         th = threading.Thread(target=thread_relaunch_landmarks)
         th.start()
+
+    def radioBtnClicked(self):
+        if self.radioBtnCobb.isChecked():
+            print("Cobb")
+            imageAngle = self.xrayImage.calculate_angles(None, None)
+            self.update_angles_tab(imageAngle)
+        elif self.radioBtnFerguson.isChecked():
+            print("Ferguson")
+            imageAngle = self.xrayImage.calculate_angles_ferguson(None, None)
+            self.update_angles_tab(imageAngle)
 
     # keypress event handler
     def keyPressEvent(self,event):

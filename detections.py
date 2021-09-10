@@ -109,12 +109,12 @@ def landmark_detection(image, patches, bounding_boxes, model):
   return mapped_landmarks, im
 
 # Calculate Cobb angles from the detected landmarks
-def calculate_angles(landmarks, image, bounding_boxes, lower_MT, upper_MT):
+def calculate_angles_ferguson(landmarks, image, bounding_boxes, lower_MT, upper_MT):
     img = image.copy()
     vertebra_slopes = []
     for lm in landmarks:
-        slope1 = (round(lm[1][1] - round(lm[0][1])))/(round(lm[1][0] - round(lm[0][0]))) 
-        slope2 = (round(lm[3][1] - round(lm[2][1])))/(round(lm[3][0] - round(lm[2][0]))) 
+        slope1 = (round(lm[1][1] - round(lm[0][1])))/(round(lm[1][0] - round(lm[0][0])))
+        slope2 = (round(lm[3][1] - round(lm[2][1])))/(round(lm[3][0] - round(lm[2][0])))
         vertebra_slopes.append((slope1 + slope2)/2)
 
 
@@ -201,6 +201,154 @@ def calculate_angles(landmarks, image, bounding_boxes, lower_MT, upper_MT):
 
     upper_slope = (round(upper_Q[1] - round(upper_P[1])))/(round(upper_Q[0] - round(upper_P[0]))) 
     lower_slope = (round(lower_Q[1] - round(lower_P[1])))/(round(lower_Q[0] - round(lower_P[0]))) 
+
+    if upper_P[1] < upper_Q[1]:
+        upper_perp_P = ((upper_MT_x2 + upper_Q[0])/2, (upper_MT_y2 + upper_Q[1])/2)
+        y = lower_Q[1]
+        upper_perp_Q = (upper_perp_P[0] - upper_slope * (y - upper_perp_P[1]), y)
+        upper_perp_P = (round(upper_perp_P[0]), round(upper_perp_P[1]))
+        upper_perp_Q = (round(upper_perp_Q[0]), round(upper_perp_Q[1]))
+
+        lower_perp_P = ((lower_MT_x2 + lower_Q[0])/2, (lower_MT_y2 + lower_Q[1])/2)
+        y = upper_Q[1]
+        lower_perp_Q = (lower_perp_P[0] - lower_slope * (y - lower_perp_P[1]), y)
+        lower_perp_P = (round(lower_perp_P[0]), round(lower_perp_P[1]))
+        lower_perp_Q = (round(lower_perp_Q[0]), round(lower_perp_Q[1]))
+
+        im = cv2.line(img, upper_perp_P, upper_perp_Q, (0,0,255), 5)
+        im = cv2.line(img, lower_perp_P, lower_perp_Q, (0,0,255), 5)
+
+    elif upper_P[1] > upper_Q[1]:
+        upper_perp_P = ((upper_MT_x1 + upper_P[0])/2, (upper_MT_y1 + upper_P[1])/2)
+        y = lower_P[1]
+        upper_perp_Q = (upper_perp_P[0] - upper_slope * (y - upper_perp_P[1]), y)
+        upper_perp_P = (round(upper_perp_P[0]), round(upper_perp_P[1]))
+        upper_perp_Q = (round(upper_perp_Q[0]), round(upper_perp_Q[1]))
+
+        lower_perp_P = ((lower_MT_x1 + lower_P[0])/2, (lower_MT_y1 + lower_P[1])/2)
+        y = upper_P[1]
+        lower_perp_Q = (lower_perp_P[0] - lower_slope * (y - lower_perp_P[1]), y)
+        lower_perp_P = (round(lower_perp_P[0]), round(lower_perp_P[1]))
+        lower_perp_Q = (round(lower_perp_Q[0]), round(lower_perp_Q[1]))
+
+        im = cv2.line(img, lower_perp_P, lower_perp_Q, (0,0,255), 5)
+        im = cv2.line(img, upper_perp_P, upper_perp_Q, (0,0,255), 5)
+
+    img_new = cv2.addWeighted(overlay, 0.2, img, 0.8, 0)
+    return cobb_angles, upper_MT, lower_MT, img_new
+
+
+# Calculate Cobb angles from the detected landmarks
+def calculate_angles_cobb(landmarks, image, bounding_boxes, lower_MT, upper_MT):
+    img = image.copy()
+    vertebra_slopes_top = []
+    vertebra_slopes_bottom = []
+    for lm in landmarks:
+        slope_top = (round(lm[1][1] - round(lm[0][1])))/(round(lm[1][0] - round(lm[0][0])))
+        slope_bottom = (round(lm[3][1] - round(lm[2][1])))/(round(lm[3][0] - round(lm[2][0])))
+        vertebra_slopes_top.append(slope_bottom)
+        vertebra_slopes_bottom.append(slope_bottom)
+
+
+    cobb_angles= [0.0,0.0,0.0]
+    if not isinstance(vertebra_slopes_top, np.ndarray):
+        vertebra_slopes_top = np.array(vertebra_slopes_top)
+    if not isinstance(vertebra_slopes_bottom, np.ndarray):
+        vertebra_slopes_bottom = np.array(vertebra_slopes_bottom)
+
+    if (lower_MT is None) and (upper_MT is None) :
+        max_slope_top = np.amax(vertebra_slopes_top)
+        min_slope_top = np.amin(vertebra_slopes_top)
+
+        # TODO: don't use argmax twice
+        if np.argmax(vertebra_slopes_top) <= np.argmin(vertebra_slopes_top):
+            upper_MT = np.argmax(vertebra_slopes_top)
+
+        else:
+            upper_MT = np.argmin(vertebra_slopes_top)
+
+        max_slope_bottom = np.amax(vertebra_slopes_bottom)
+        min_slope_bottom = np.amin(vertebra_slopes_bottom)
+
+        # TODO: don't use argmax twice
+        if np.argmax(vertebra_slopes_bottom) >= np.argmin(vertebra_slopes_bottom):
+            lower_MT = np.argmax(vertebra_slopes_bottom)
+
+        else:
+            lower_MT = np.argmin(vertebra_slopes_bottom)
+
+    else :
+        max_slope = vertebra_slopes_bottom[lower_MT]
+        min_slope = vertebra_slopes_top[upper_MT]
+
+    # try:
+    #     upper_max_slope = np.amax(vertebra_slopes[0:upper_MT+1])
+    #     upper_min_slope = np.amin(vertebra_slopes[0:upper_MT+1])
+    # except ValueError:
+    #     # If range 0:upper_MT+1 contains 0 items
+    #     upper_max_slope = vertebra_slopes[upper_MT]
+    #     upper_min_slope = vertebra_slopes[upper_MT]
+
+
+    # try:
+    #     lower_max_slope=np.amax(vertebra_slopes[lower_MT:len(vertebra_slopes)-1])
+    #     lower_min_slope=np.amin(vertebra_slopes[lower_MT:len(vertebra_slopes)-1])
+    # except ValueError:
+    #     # If range 0:upper_MT+1 contains 0 items
+    #     lower_max_slope=vertebra_slopes[lower_MT]
+    #     lower_min_slope=vertebra_slopes[lower_MT]
+
+    cobb_angles[0] = abs(np.rad2deg(np.arctan(vertebra_slopes_top[upper_MT])) - np.rad2deg(np.arctan(vertebra_slopes_bottom[lower_MT])))
+    # cobb_angles[1] = abs(np.rad2deg(np.arctan(upper_max_slope)) - np.rad2deg(np.arctan(upper_min_slope)))
+    # cobb_angles[2] = abs(np.rad2deg(np.arctan(lower_max_slope)) - np.rad2deg(np.arctan(lower_min_slope)))
+    cobb_angles[1] = cobb_angles[0]
+    cobb_angles[2] = cobb_angles[0]
+
+    overlay = img.copy()
+    cv2.rectangle(overlay, (round(bounding_boxes[upper_MT][0]), round(bounding_boxes[upper_MT][1])), (round(bounding_boxes[upper_MT][2]), round(bounding_boxes[upper_MT][3])), (0, 255, 0), -1)
+    cv2.rectangle(overlay, (round(bounding_boxes[lower_MT][0]), round(bounding_boxes[lower_MT][1])), (round(bounding_boxes[lower_MT][2]), round(bounding_boxes[lower_MT][3])), (255, 0, 0), -1)
+    def get_line(P, Q):
+        line = {}
+        line["a"] = P[1] - Q[1]
+        line["b"] = Q[0] - P[0]
+        line["c"] = line["a"]*(P[0]) + line["b"]*(P[1])
+
+        return line
+
+    def get_x(line, y):
+        return ((-1)*line["b"]*y + line["c"])/line["a"]
+
+    def get_y(line, x):
+        return ((-1)*line["a"]*x + line["c"])/line["b"]
+
+
+
+    upper_MT_x1 = landmarks[upper_MT][0][0]
+    upper_MT_x2 = landmarks[upper_MT][1][0]
+    upper_MT_y1 = landmarks[upper_MT][0][1]
+    upper_MT_y2 = landmarks[upper_MT][1][1]
+
+    lower_MT_x1 = landmarks[lower_MT][3][0]
+    lower_MT_x2 = landmarks[lower_MT][2][0]
+    lower_MT_y1 = landmarks[lower_MT][3][1]
+    lower_MT_y2 = landmarks[lower_MT][2][1]
+
+    upper_line = get_line((upper_MT_x1, upper_MT_y1), (upper_MT_x2, upper_MT_y2))
+
+    upper_P = (0, round(get_y(upper_line, 0)))
+    upper_Q = (img.shape[1], round(get_y(upper_line, img.shape[1])))
+
+    lower_line = get_line((lower_MT_x1, lower_MT_y1), (lower_MT_x2, lower_MT_y2))
+
+    lower_P = (0, round(get_y(lower_line, 0)))
+    lower_Q = (img.shape[1], round(get_y(lower_line, img.shape[1])))
+
+
+    im = cv2.line(img, upper_P, upper_Q, (213,1,2), 5)
+    im = cv2.line(img, lower_P, lower_Q, (213,1,2), 5)
+
+    upper_slope = (round(upper_Q[1] - round(upper_P[1])))/(round(upper_Q[0] - round(upper_P[0])))
+    lower_slope = (round(lower_Q[1] - round(lower_P[1])))/(round(lower_Q[0] - round(lower_P[0])))
 
     if upper_P[1] < upper_Q[1]:
         upper_perp_P = ((upper_MT_x2 + upper_Q[0])/2, (upper_MT_y2 + upper_Q[1])/2)

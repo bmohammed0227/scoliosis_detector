@@ -5,7 +5,7 @@ import numpy as np
 import cv2
 import time
 from model_loaders import *
-from detections import object_detection, landmark_detection, calculate_angles
+from detections import object_detection, landmark_detection, calculate_angles_ferguson, calculate_angles_cobb
 
 class XRayImage():
     def __init__(self) -> None:
@@ -35,8 +35,9 @@ class XRayImage():
         self.isCorrectedLandmarks = False
 
         # Variables for angles calculation
-        self.imageAngle = None
-        self.cobbAngles = []
+        self.imageAngleCobb = None
+        self.imageAngleFerguson = None
+        self.cobbAngles: list[float] = []
         self.upper_MT = 0
         self.lower_MT = 0
 
@@ -152,9 +153,18 @@ class XRayImage():
     # Launch the angle calculation
     def calculate_angles(self, lower_MT, upper_MT):
         # Calculate cobb angles, upper MT and lower MT
-        self.cobbAngles, self.upper_MT, self.lower_MT, self.imageAngle = calculate_angles(self.landmarks, self.image, self.bboxes, lower_MT, upper_MT)
+        self.cobbAngles, self.upper_MT, self.lower_MT, self.imageAngleCobb = calculate_angles_cobb(self.landmarks, self.image, self.bboxes, lower_MT, upper_MT)
 
-        return self.imageAngle
+        return self.imageAngleCobb
+
+
+    # Launch the angle calculation
+    def calculate_angles_ferguson(self, lower_MT, upper_MT):
+        # Calculate cobb angles, upper MT and lower MT
+
+        self.cobbAngles, self.upper_MT, self.lower_MT, self.imageAngleFerguson = calculate_angles_ferguson(self.landmarks, self.image, self.bboxes, lower_MT, upper_MT)
+
+        return self.imageAngleFerguson
 
 # TODO: make a VertebraImage class and separate its attributes from XRayImage class
 class VertebraImage():
